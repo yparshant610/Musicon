@@ -1,5 +1,6 @@
-.spotify_cache
 .env
+.spotify_cache
+youtube_cookies.txt
 
 __pycache__/
 *.pyc
