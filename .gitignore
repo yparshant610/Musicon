@@ -1,0 +1,10 @@
+.spotify_cache
+.env
+
+__pycache__/
+*.pyc
+
+dc_env/
+bin/
+.cache
+.vscode/
