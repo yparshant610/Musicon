@@ -58,6 +58,22 @@ FFMPEG_PATH = shutil.which("ffmpeg") or os.path.join(
     "ffmpeg.exe"
 )
 
+YOUTUBE_COOKIE_FILE = os.getenv("YOUTUBE_COOKIE_FILE", "").strip()
+
+
+def get_youtube_cookie_file():
+
+    if not YOUTUBE_COOKIE_FILE:
+        return None
+
+    if not os.path.isfile(YOUTUBE_COOKIE_FILE):
+        print(
+            f"WARNING: YouTube cookie file was not found: {YOUTUBE_COOKIE_FILE}"
+        )
+        return None
+
+    return YOUTUBE_COOKIE_FILE
+
 
 # ============================================================
 # VALIDATION
@@ -391,6 +407,12 @@ def search_youtube(query):
             "source_address": "0.0.0.0"
         }
 
+        cookie_file = get_youtube_cookie_file()
+
+        if cookie_file:
+            options["cookiefile"] = cookie_file
+            print("Using configured YouTube cookie file for search.")
+
         with yt_dlp.YoutubeDL(options) as ytdl:
 
             result = ytdl.extract_info(
@@ -448,11 +470,6 @@ def get_audio_url(video_url):
 
     try:
 
-        browser = os.getenv(
-            "YOUTUBE_BROWSER",
-            ""
-        ).strip().lower()
-
         options = {
             "format": "bestaudio/best",
             "quiet": True,
@@ -472,10 +489,27 @@ def get_audio_url(video_url):
         }
 
         # ----------------------------------------------------
-        # Use browser cookies when configured
+        # Use exported YouTube cookies when configured
         # ----------------------------------------------------
 
-        if browser:
+        cookie_file = get_youtube_cookie_file()
+
+        if cookie_file:
+
+            options["cookiefile"] = cookie_file
+
+            print(
+                f"Using YouTube cookie file: {cookie_file}"
+            )
+
+        else:
+
+            # Optional fallback for a local machine where a browser
+            # is available. This is normally not used on EC2.
+            browser = os.getenv(
+                "YOUTUBE_BROWSER",
+                ""
+            ).strip().lower()
 
             supported_browsers = {
                 "chrome",
@@ -490,54 +524,22 @@ def get_audio_url(video_url):
 
             if browser in supported_browsers:
 
-                options[
-                    "cookiesfrombrowser"
-                ] = (
+                options["cookiesfrombrowser"] = (
                     browser,
                 )
 
                 print(
-                    f"Using {browser} browser cookies "
-                    f"for YouTube."
+                    f"Using {browser} browser cookies for YouTube."
                 )
 
-        try:
+        with yt_dlp.YoutubeDL(options) as ytdl:
 
-            with yt_dlp.YoutubeDL(
-                options
-            ) as ytdl:
-
-                info = ytdl.extract_info(
-                    video_url,
-                    download=False
-                )
-
-        except Exception as cookie_error:
-
-            # Browser cookies are optional; retry without them if they cannot be decrypted.
-            if "cookiesfrombrowser" not in options:
-                raise
-
-            print(
-                f"Browser cookies unavailable, retrying without cookies: {cookie_error}"
+            info = ytdl.extract_info(
+                video_url,
+                download=False
             )
-
-            options.pop(
-                "cookiesfrombrowser",
-                None
-            )
-
-            with yt_dlp.YoutubeDL(
-                options
-            ) as ytdl:
-
-                info = ytdl.extract_info(
-                    video_url,
-                    download=False
-                )
 
         if not info:
-
             return None
 
         return {
@@ -1120,6 +1122,12 @@ def process_youtube_playlist(url):
             "extract_flat": True,
             "skip_download": True
         }
+
+        cookie_file = get_youtube_cookie_file()
+
+        if cookie_file:
+            options["cookiefile"] = cookie_file
+            print("Using configured YouTube cookie file for playlist.")
 
         with yt_dlp.YoutubeDL(options) as ytdl:
 
