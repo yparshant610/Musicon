@@ -1,0 +1,17 @@
+[Unit]
+Description=Musicon Discord Music Bot (24/7 Production)
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/Musicon
+ExecStart=/home/ubuntu/Musicon/dc_env/bin/python3 MyBot.py
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

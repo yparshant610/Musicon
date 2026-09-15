@@ -11,11 +11,13 @@
 [![Spotify API](https://img.shields.io/badge/Spotify-API-1DB954?style=for-the-badge&logo=spotify&logoColor=white)](https://developer.spotify.com/)
 [![yt-dlp](https://img.shields.io/badge/yt--dlp-Stream%20Engine-FF0000?style=for-the-badge&logo=youtube&logoColor=white)](https://github.com/yt-dlp/yt-dlp)
 [![FFmpeg](https://img.shields.io/badge/FFmpeg-Audio%20Core-007808?style=for-the-badge&logo=ffmpeg&logoColor=white)](https://ffmpeg.org/)
+[![AWS EC2](https://img.shields.io/badge/AWS%20EC2-t3.small%20(Ubuntu)-FF9900?style=for-the-badge&logo=amazonec2&logoColor=white)](https://aws.amazon.com/ec2/)
+[![Hosted 24/7](https://img.shields.io/badge/Hosted%2024%2F7-Active%20on%20AWS-brightgreen?style=for-the-badge&logo=linux&logoColor=white)](#-production-deployment-aws-ec2-t3small)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)](LICENSE)
 
 <br />
 
-[Features](#-key-features) • [Architecture](#-architecture) • [Slash Commands](#-slash-commands) • [Installation](#-installation) • [Configuration](#-configuration) • [Spotify Setup](#-spotify-integration) • [YouTube Cookies](#-youtube-cookie-bypass) • [Deployment](#-deployment)
+[Features](#-key-features) • [Architecture](#-architecture) • [Slash Commands](#-slash-commands) • [Installation](#-installation) • [Configuration](#-configuration) • [Spotify Setup](#-spotify-integration) • [YouTube Cookies](#-youtube-cookie-bypass) • [AWS EC2 Deployment (24/7)](#-production-deployment-aws-ec2-t3small)
 
 </div>
 
@@ -26,6 +28,8 @@
 **Musicon** is a modern, modular Discord music bot engineered for uncompromising audio performance and reliability. It combines native Discord Slash Commands, robust YouTube audio extraction via `yt-dlp`, deep Spotify catalog resolution with genre classification via `spotipy`, and a smart **Auto-DJ** recommendation algorithm that keeps the party alive even when your queue runs empty.
 
 Whether you're listening to single tracks, entire Spotify albums, or massive playlists, Musicon resolves and streams audio with zero lag and high-fidelity sound.
+
+> 🚀 **Live Production Deployment**: Musicon is deployed and runs **24/7** on an **AWS EC2 `t3.small` instance (Ubuntu LTS)** using a dedicated `systemd` daemon with self-healing audio stream recovery and persistent uptime.
 
 ---
 
@@ -116,6 +120,7 @@ flowchart TD
 Musicon/
 ├── MyBot.py                 # Core bot logic, commands, events, and Auto-DJ engine
 ├── requirements.txt         # Project Python dependencies
+├── musicon.service          # Systemd unit file for 24/7 AWS EC2 deployment
 ├── .env.example             # Template for required environment variables
 ├── .env                     # Your private credentials (DO NOT COMMIT)
 ├── youtube_cookies.txt      # Netscape-formatted YouTube cookies for anti-bot bypass
@@ -269,60 +274,218 @@ To prevent YouTube from blocking requests with *"Sign in to confirm you're not a
 
 ---
 
-## 🚀 Deployment
+## ☁️ Production Deployment (AWS EC2 t3.small - 24/7)
 
-### Running Locally
+Musicon is built and tested for continuous, uninterrupted **24/7 execution** on an **Amazon Web Services (AWS) EC2 `t3.small` instance** running **Ubuntu Linux**.
 
-To launch Musicon:
+### ⚙️ Production Architecture & Specs
 
-```bash
-python MyBot.py
-```
+| Component | Specification | Purpose |
+| :--- | :--- | :--- |
+| **Cloud Provider** | Amazon Web Services (AWS) | High-availability global infrastructure |
+| **Instance Type** | `t3.small` (2 vCPU, 2 GB RAM) | Ideal balance of compute and cost for streaming audio |
+| **Operating System**| Ubuntu 22.04 / 24.04 LTS | Stable Linux server environment |
+| **Process Manager**| `systemd` (`musicon.service`) | Auto-restart on crash, reboot persistence, background daemon |
+| **Storage / Swap** | 20 GB gp3 SSD + 2 GB Swap file | Prevents OOM (Out Of Memory) during peak FFmpeg transcoding |
+| **Anti-Bot Engine**| Netscape cookie injection | Bypasses YouTube datacenter IP blocking & bot challenges |
 
-### Development vs Production Command Sync
+---
 
-In [MyBot.py](file:///d:/bot%20discord/MyBot.py):
+### 📋 Step-by-Step EC2 Deployment Walkthrough
 
-* **Development Mode (`DEVELOPMENT_MODE = True`)**:
-  Syncs slash commands immediately to `TEST_GUILD_ID` for instant testing without Discord's global command sync caching delay.
-* **Production Mode (`DEVELOPMENT_MODE = False`)**:
-  Registers commands globally across all guilds where the bot is invited.
+#### 1. Launch & Configure the EC2 Instance
 
-### Running 24/7 on Linux (Systemd Service)
+1. In the **AWS Management Console**, navigate to **EC2 > Launch Instance**.
+2. **Name**: `Musicon-Production-Bot`
+3. **AMI**: Ubuntu Server 24.04 LTS or 22.04 LTS (64-bit x86).
+4. **Instance Type**: `t3.small` (2 vCPU, 2 GiB Memory).
+5. **Key Pair**: Select or generate an SSH key pair (`.pem` format).
+6. **Network Settings (Security Group)**:
+   - **Inbound Rules**: 
+     - `SSH (TCP 22)` from `My IP` (or restricted CIDR for security).
+   - **Outbound Rules**:
+     - `All traffic (0.0.0.0/0)` (Required for Discord Gateway WebSocket, voice UDP, YouTube streams, and Spotify API).
+7. **Storage**: `20 GiB gp3`.
+8. Click **Launch Instance**.
 
-Create a systemd service file:
-
-```bash
-sudo nano /etc/systemd/system/musicon.service
-```
-
-Paste the following template (adjust paths and user accordingly):
-
-```ini
-[Unit]
-Description=Musicon Discord Music Bot
-After=network.target
-
-[Service]
-Type=simple
-User=ubuntu
-WorkingDirectory=/home/ubuntu/Musicon
-ExecStart=/home/ubuntu/Musicon/dc_env/bin/python MyBot.py
-Restart=always
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
-```
-
-Enable and start the service:
+#### 2. Connect to Your EC2 Instance via SSH
 
 ```bash
+chmod 400 your-key.pem
+ssh -i "your-key.pem" ubuntu@<YOUR_EC2_PUBLIC_IP_OR_DNS>
+```
+
+#### 3. Update System Packages & Install FFmpeg
+
+Run the following commands on your EC2 instance:
+
+```bash
+# Update repositories and upgrade packages
+sudo apt update && sudo apt upgrade -y
+
+# Install essential packages, Python 3, venv, Git, and FFmpeg
+sudo apt install -y python3 python3-pip python3-venv ffmpeg git curl
+
+# Verify FFmpeg installation
+ffmpeg -version
+```
+
+#### 4. Configure Swap Memory (Recommended for `t3.small`)
+
+The `t3.small` instance features 2 GB of physical RAM. To prevent sudden Out-Of-Memory (OOM) process termination during heavy FFmpeg transcoding or multi-track queueing, configure a 2 GB swap file:
+
+```bash
+sudo fallocate -l 2G /swapfile
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+
+# Verify swap activation
+free -h
+```
+
+#### 5. Clone the Repository & Setup Virtual Environment
+
+```bash
+# Navigate to home directory and clone repository
+cd /home/ubuntu
+git clone https://github.com/yparshant610/Musicon.git
+cd Musicon
+
+# Create virtual environment
+python3 -m venv dc_env
+
+# Activate virtual environment
+source dc_env/bin/activate
+
+# Upgrade pip and install dependencies
+pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+#### 6. Transfer `.env` and `youtube_cookies.txt` from Local Machine
+
+> [!IMPORTANT]
+> Because cloud datacenter IPs (like AWS EC2) are frequently challenged with YouTube's *"Sign in to confirm you're not a bot"* page, transferring `youtube_cookies.txt` is essential for 24/7 stream stability.
+
+From your **local terminal** (Windows PowerShell or macOS/Linux):
+
+```bash
+# Transfer .env file
+scp -i "your-key.pem" .env ubuntu@<YOUR_EC2_PUBLIC_IP>:/home/ubuntu/Musicon/.env
+
+# Transfer youtube_cookies.txt
+scp -i "your-key.pem" youtube_cookies.txt ubuntu@<YOUR_EC2_PUBLIC_IP>:/home/ubuntu/Musicon/youtube_cookies.txt
+```
+
+#### 7. Set Production Mode in `MyBot.py`
+
+On your EC2 instance, ensure [MyBot.py](file:///d:/bot%20discord/MyBot.py) has global command synchronization enabled:
+
+```python
+DEVELOPMENT_MODE = False  # Set to False to register slash commands globally
+```
+
+#### 8. Configure & Enable Systemd Service (24/7 Daemon)
+
+Musicon includes a ready-to-use [`musicon.service`](file:///d:/bot%20discord/musicon.service) configuration file in the project root.
+
+Copy the service file to the system directory:
+
+```bash
+sudo cp /home/ubuntu/Musicon/musicon.service /etc/systemd/system/musicon.service
+```
+
+> **Service File Contents** ([musicon.service](file:///d:/bot%20discord/musicon.service)):
+> ```ini
+> [Unit]
+> Description=Musicon Discord Music Bot (24/7 Production)
+> After=network.target
+> 
+> [Service]
+> Type=simple
+> User=ubuntu
+> WorkingDirectory=/home/ubuntu/Musicon
+> ExecStart=/home/ubuntu/Musicon/dc_env/bin/python3 MyBot.py
+> Restart=always
+> RestartSec=5
+> StandardOutput=journal
+> StandardError=journal
+> Environment=PYTHONUNBUFFERED=1
+> 
+> [Install]
+> WantedBy=multi-user.target
+> ```
+
+Reload systemd daemon, enable auto-start on boot, and start Musicon:
+
+```bash
+# Reload systemd daemon
 sudo systemctl daemon-reload
+
+# Enable service to start automatically on EC2 reboot
 sudo systemctl enable musicon
+
+# Start the bot
 sudo systemctl start musicon
+
+# Check service status
 sudo systemctl status musicon
 ```
+
+---
+
+### 📊 Managing the 24/7 Service & Live Logs
+
+| Action | Command |
+| :--- | :--- |
+| **Check bot status** | `sudo systemctl status musicon` |
+| **View live logs (real-time)** | `sudo journalctl -u musicon -f` |
+| **View last 100 log lines** | `sudo journalctl -u musicon -n 100 --no-pager` |
+| **Restart the bot** | `sudo systemctl restart musicon` |
+| **Stop the bot** | `sudo systemctl stop musicon` |
+
+---
+
+### 🔄 Updating the Bot & Dependencies on EC2
+
+To pull code updates and restart the bot seamlessly:
+
+```bash
+cd /home/ubuntu/Musicon
+git pull origin main
+source dc_env/bin/activate
+pip install --upgrade -r requirements.txt
+sudo systemctl restart musicon
+```
+
+#### Auto-updating `yt-dlp` (Prevent YouTube stream breaks)
+
+YouTube updates their player signatures often. To ensure zero playback disruption, set up a weekly cron job on EC2 to keep `yt-dlp` updated:
+
+```bash
+crontab -e
+```
+
+Add the following line to update `yt-dlp` every Sunday at 4:00 AM UTC and restart the bot:
+
+```cron
+0 4 * * 0 /home/ubuntu/Musicon/dc_env/bin/pip install --upgrade yt-dlp && sudo systemctl restart musicon
+```
+
+---
+
+## 💻 Local Development
+
+If you prefer testing or developing features on your local machine before pushing to AWS EC2:
+
+1. Follow the [Installation](#-installation) steps.
+2. Set `DEVELOPMENT_MODE = True` and set `TEST_GUILD_ID` in [MyBot.py](file:///d:/bot%20discord/MyBot.py) for instant slash command synchronization.
+3. Start the bot:
+   ```bash
+   python MyBot.py
+   ```
 
 ---
 
